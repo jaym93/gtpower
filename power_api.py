@@ -2,7 +2,7 @@ import json
 import re
 import pymysql
 import flask
-import flasgger
+import flasgger import Swagger
 import logging
 from flask import request
 from flask_cas import CAS, login_required
