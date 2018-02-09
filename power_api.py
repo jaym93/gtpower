@@ -2,6 +2,7 @@ import json
 import re
 import pymysql
 import flask
+import flasgger
 import logging
 from flask import request
 from flask_cas import CAS, login_required
@@ -9,10 +10,18 @@ import os
 
 app = flask.Flask(__name__)
 CAS(app)
-app.config['CAS_SERVER'] = 'https://login.gatech.edu/'
-app.config['CAS_AFTER_LOGIN'] = '/'
+swag = Swagger(app)
+app.config['CAS_SERVER'] = 'https://login.gatech.edu/cas'
+app.config['CAS_VALIDATE_ROUTE'] = '/serviceValidate'
+app.config['SECRET_KEY'] = '6d4e24b1bbaec5f6f7ac35878920b8ebdfdf71bc53521f31bc4ec47885de610d' #set a random key, otherwise the authentication will throw errors
 app.config['SESSION_TYPE'] = 'filesystem'
-app.secret_key = '6d4e24b1bbaec5f6f7ac35878920b8ebdfdf71bc53521f31bc4ec47885de610d'
+app.config['CAS_AFTER_LOGIN'] =''
+app.config['SWAGGER'] = {
+    'title': 'Places API',
+    'description': 'This API will allow you to access the information of the places at Georgia Tech. It can be used to find out information about the offices and the buildings such as their names, addresses, phone numbers, images, categories and GPS coordinates.',
+    'version': '2.0.0',
+    'schemes':['http','https']
+}
 conn = pymysql.connect(host='db0.rnoc.gatech.edu', port=3306, user=os.environ['DB_USERNAME'], passwd=os.environ['DB_PASSWORD'], db='CORE_gtfacilities')
 cur = conn.cursor()
 
@@ -21,6 +30,9 @@ def get_building(b_id):
     execute_query(query)
     name = cur.fetchone()
     return name
+
+def get_sensor_read(sensor_id):
+    query = "select 
 
 def execute_query(query):
     try:
