@@ -31,9 +31,6 @@ def get_building(b_id):
     name = cur.fetchone()
     return name
 
-def get_sensor_read(sensor_id):
-    query = "select 
-
 def execute_query(query):
     try:
         cur.execute(query)
@@ -62,13 +59,10 @@ def sensortype_mapper(source):
         return (sensortypes[stype])
     except KeyError:
         return "unknown"
-        
 
-def res_to_json(b_id, row):
-        name = get_building(b_id)
+
+def res_to_json(row):
         output = {
-            "b_id": b_id,
-            "building_name": name,
             "source_name": row[3][:-1],    # remove the trailing \r that seems to be in the database
             "source_type": sensortype_mapper(row[3]),
             "timestamp": row[0],           # get data in UNIX format, with GMT times, client can use JavaScript to convert timezones.
@@ -91,7 +85,7 @@ def getEnergyData(b_id):
     results = cur.fetchall()
     response = []
     for result in results:
-        response.append(res_to_json(b_id, result))
+        response.append(res_to_json(result).append({'b_id':b_id, 'name':get_building(b_id)}))
     return flask.jsonify(response)
 
 @app.route("/facilities/power/<b_id>", methods=['GET'])
@@ -103,7 +97,7 @@ def getPowerData(b_id):
     results = cur.fetchall()
     response = []
     for result in results:
-        response.append(res_to_json(b_id, result))
+        response.append(res_to_json(result).append({'b_id':b_id, 'name':get_building(b_id)})) # attaching building ID where the sensor is located
     return flask.jsonify(response)
 
 @app.route("/facilities/sensor/<sensor_id>", methods=['GET'])
@@ -115,8 +109,28 @@ def getSensorData(sensor_id):
     results = cur.fetchall()
     response = []
     for result in results:
-        response.append(res_to_json(b_id, result))
+        response.append(res_to_json(result))
     return flask.jsonify(response)
+
+@login_required
+@app.route("/facilities/sensor_metadata/<sensor_id>", methods=['GET'])
+def getSensorData(sensor_id):
+    query = "SELECT * FROM `sensors` WHERE sensor_id = '"+sensor_id+"'"
+    cur.execute(query)
+    results = cur.fetchall()
+    response = []
+    for result in results:
+        output = {
+        "sensor_id": result[0],    # remove the trailing \r that seems to be in the database
+        "sensor_type": result[1],
+        "site": result[2],           # get data in UNIX format, with GMT times, client can use JavaScript to convert timezones.
+        "protocol": result[3],
+        "description": result[4],
+        "cluster_id": result[5],
+        }
+        response.append(output)
+    return flask.jsonify(response)
+
 
 app.run(debug=True, host="0.0.0.0", port=5000)    
 
