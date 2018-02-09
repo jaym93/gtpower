@@ -9,7 +9,7 @@ from flask_cas import CAS, login_required
 import os
 
 app = flask.Flask(__name__)
-CAS(app)
+cas = CAS(app)
 swag = Swagger(app)
 app.config['CAS_SERVER'] = 'https://login.gatech.edu/cas'
 app.config['CAS_VALIDATE_ROUTE'] = '/serviceValidate'
@@ -73,8 +73,9 @@ def res_to_json(row):
 
 @app.route("/",methods=['GET'])
 @login_required
-def authenticate():
-    return flask.jsonify(200)
+def index():
+    username = cas.username
+    return "Logged in as: " + username
 
 @app.route("/facilities/energy/<b_id>", methods=['GET'])
 def getEnergyData(b_id):
@@ -114,7 +115,7 @@ def getSensorData(sensor_id):
 
 @login_required
 @app.route("/facilities/sensor_metadata/<sensor_id>", methods=['GET'])
-def getSensorData(sensor_id):
+def getSensorMetadata(sensor_id):
     query = "SELECT * FROM `sensors` WHERE sensor_id = '"+sensor_id+"'"
     cur.execute(query)
     results = cur.fetchall()
