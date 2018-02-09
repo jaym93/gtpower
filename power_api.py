@@ -86,7 +86,7 @@ def getEnergyData(b_id):
     results = cur.fetchall()
     response = []
     for result in results:
-        response.append(res_to_json(result).append({'b_id':b_id, 'name':get_building(b_id)}))
+        response.append(res_to_json(result).update({'b_id':b_id, 'name':get_building(b_id)})) # attaching building ID where the sensor is located
     return flask.jsonify(response)
 
 @app.route("/facilities/power/<b_id>", methods=['GET'])
@@ -98,7 +98,7 @@ def getPowerData(b_id):
     results = cur.fetchall()
     response = []
     for result in results:
-        response.append(res_to_json(result).append({'b_id':b_id, 'name':get_building(b_id)})) # attaching building ID where the sensor is located
+        response.append(res_to_json(result).update({'b_id':b_id, 'name':get_building(b_id)})) # attaching building ID where the sensor is located
     return flask.jsonify(response)
 
 @app.route("/facilities/sensor/<sensor_id>", methods=['GET'])
