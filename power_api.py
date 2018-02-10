@@ -50,6 +50,7 @@ def sensortype_mapper(source):
     stype = re.search('B\d\d\d(.*)',source).group(1)[:-1] # removing the Bxxx part, and the trailing \r that seems to be in the database
     stype = ''.join(filter(str.isalpha, stype)) # keep only the characters, drop all numbers - this gives a unique 3 letter code (for now) for all different meters
     sensortypes = {
+        "EMS":"Electrical mains transformer (4160V - 480V)",
         "EMH":"Electrical mains meter, high voltage (480V)",
         "EML":"Electrical mains meter, low voltage (208V)",
         "EUH":"Electrical sub-meter, high voltage (480V)",
@@ -86,7 +87,10 @@ def getEnergyData(b_id):
     results = cur.fetchall()
     response = []
     for result in results:
-        response.append(res_to_json(result).update({'b_id':b_id, 'name':get_building(b_id)})) # attaching building ID where the sensor is located
+        energy_data = res_to_json(result)
+        energy_data["b_id"] = b_id
+        energy_data["b_name"] = get_building(b_id)
+        response.append(energy_data)
     return flask.jsonify(response)
 
 @app.route("/facilities/power/<b_id>", methods=['GET'])
@@ -98,7 +102,10 @@ def getPowerData(b_id):
     results = cur.fetchall()
     response = []
     for result in results:
-        response.append(res_to_json(result).update({'b_id':b_id, 'name':get_building(b_id)})) # attaching building ID where the sensor is located
+        power_data = res_to_json(result)
+        power_data["b_id"] = b_id
+        power_data["b_name"] = get_building(b_id)
+        response.append(power_data)
     return flask.jsonify(response)
 
 @app.route("/facilities/sensor/<sensor_id>", methods=['GET'])
@@ -118,19 +125,16 @@ def getSensorData(sensor_id):
 def getSensorMetadata(sensor_id):
     query = "SELECT * FROM `sensors` WHERE sensor_id = '"+sensor_id+"'"
     cur.execute(query)
-    results = cur.fetchall()
-    response = []
-    for result in results:
-        output = {
-        "sensor_id": result[0],    # remove the trailing \r that seems to be in the database
-        "sensor_type": result[1],
-        "site": result[2],           # get data in UNIX format, with GMT times, client can use JavaScript to convert timezones.
-        "protocol": result[3],
-        "description": result[4],
-        "cluster_id": result[5],
-        }
-        response.append(output)
-    return flask.jsonify(response)
+    results = cur.fetchone()
+    output = {
+    "sensor_id": results[0],    # remove the trailing \r that seems to be in the database
+    "sensor_type": results[1],
+    "site": results[2],           # get data in UNIX format, with GMT times, client can use JavaScript to convert timezones.
+    "protocol": results[3],
+    "description": results[4][:-2],
+    "cluster_id": results[5]
+    }
+    return flask.jsonify(output)
 
 
 app.run(debug=True, host="0.0.0.0", port=5000)    
