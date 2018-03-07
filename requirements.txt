@@ -1,3 +1,6 @@
 Flask
-PyMySql
+flask_restful
+flasgger
+pymysql
+sqlalchemy
 Flask-CAS
