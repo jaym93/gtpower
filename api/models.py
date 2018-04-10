@@ -5,68 +5,42 @@ See SQL Alchemy documentation:
 http://flask-sqlalchemy.pocoo.org/2.3/
 http://docs.sqlalchemy.org/en/latest/
 """
-from sqlalchemy import String, Text, Float, Integer, UniqueConstraint, ForeignKey, cast
-from sqlalchemy.orm import remote, foreign
+from sqlalchemy import String, Text, Float, Integer, DateTime, text
 
-from places.extensions import db
+from api.extensions import db
 
 
-class Building(db.Model):
+class Power(db.Model):
     """
     DB model representing a building
     """
-    __tablename__ = 'buildings'
+    __tablename__ = 'power'
 
-    b_id = db.Column('b_id', String(8), primary_key=True)
-    api_id = db.Column('api_id', Text, nullable=False)
-    name = db.Column('name', Text, nullable=False)
-    address = db.Column('address', Text, nullable=False)
-    # TODO: should be renamed to "address2" in database - or db should have state field added.  Maybe even address1, address2 and state added?
-    city = db.Column('city', Text, nullable=False)
-    zipcode = db.Column('zipcode', Text, nullable=False)
-    image_url = db.Column('image_url', Text, nullable=False)
-    website_url = db.Column('website_url', Text, nullable=False)
-    longitude = db.Column('longitude', Float, nullable=False)
-    latitude = db.Column('latitude', Float, nullable=False)
-    shape_coordinates = db.Column('shape_coordinates', Text, nullable=True)
-    phone_num = db.Column('phone_num', String(15), nullable=False)
+    timestamp = db.Column(DateTime, primary_key=True, nullable=False, index=True, server_default=text("CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"))
+    type = db.Column(String(100), primary_key=True, nullable=False)
+    value_read = db.Column(Float(asdecimal=True), nullable=False)
+    source_name = db.Column(String(100), primary_key=True, nullable=False)
 
-    # Building.tags attribute defined by Tag.building backref
 
-# TODO: Remove legacy Category?
-class Category(db.Model):
+class Users(db.Model):
     """
     DB model representing a category associated with a building
     """
-    __tablename__ = 'categories'
+    __tablename__ = 'users'
 
-    cat_id = db.Column('cat_id', Integer, primary_key=True, autoincrement=True)
-    # TODO: DB table doesn't but should have foriegn key- lying here to SQL Alchemy
-    b_id = db.Column('b_id', Text, ForeignKey("buildings.b_id"), nullable=False)
-    cat_name = db.Column('cat_name', Text, nullable=False)
-
-    # TODO: update when the table has a proper foriegn key constraint
-    # building relationship - this is a more complex as there is not a proper foreign key and the b_id column types differ
-    buildings = db.relationship('Building', backref=('categories'), primaryjoin=cast(remote(Building.b_id), Text) == foreign(b_id))
+    username = db.Column(String(30), primary_key=True)
+    role = db.Column(String(30), nullable=False)
 
 
-class Tag(db.Model):
+class Sensors(db.Model):
     """
     DB model representing a tag associated with a building
     """
-    __tablename__ = 'tags'
-    __table_args__ = (UniqueConstraint('b_id', 'tag_name'),)
+    __tablename__ = 'sensors'
 
-    tag_id = db.Column('tag_id', Integer, primary_key=True, autoincrement=True)
-    # TODO: DB table doesn't but should have foriegn key- lying here to SQL Alchemy
-    b_id = db.Column('b_id', Text, ForeignKey("buildings.b_id"), nullable=False)
-    tag_name = db.Column('tag_name', Text, nullable=False)
-    gtuser = db.Column('gtuser', Text, nullable=False)
-    auth = db.Column('auth', Integer, default=0)
-    times_tag = db.Column('times_tag', Integer, default=1, nullable=False)
-    flag_users = db.Column('flag_users', Text, nullable=True)
-    times_flagged = db.Column('times_flagged', Integer, default=0, nullable=False)
-
-    # TODO: update when the table has a proper foreign key constraint
-    # building relationship - this is a more complex as there is not a proper foreign key and the b_id column types differ
-    building = db.relationship('Building', backref=('tags'), primaryjoin=cast(remote(Building.b_id), Text) == foreign(b_id))
+    sensor_id = db.Column(String(50), primary_key=True)
+    type = db.Column(String(50), nullable=False)
+    site = db.Column(String(100), nullable=False)
+    protocol = db.Column(String(20), nullable=False)
+    description = db.Column(Text, nullable=False)
+    cluster_id = db.Column(String(10), nullable=False)

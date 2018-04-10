@@ -10,13 +10,56 @@ import flask
 from flask import request, Blueprint
 from flask_cas import login_required
 
-from places.errors import NotFoundException, BadRequestException
-from places.extensions import cas, db
-from places.models import Building, Tag, Category
-from places.schema import buildings_schema, building_schema, tags_schema, tag_schema
+from api.errors import NotFoundException, BadRequestException
+from api.extensions import cas, db
+from api.models import Power, Users, Sensors
+from api.schema import power_energy_schema, sensor_schema, sensor_metadata_schema
 
 api = Blueprint('gtplaces', __name__)
 
+def units_mapper(meas_type):
+    """
+    Maps units to each kind of meter
+    """
+    # Add more units here as more unique 'type's in the database are added
+    units = {"Active Energy Delivered": "kWh",
+             "Active Power": "kW"}
+    try:
+        return (units[meas_type])
+    except KeyError:
+        return ""
+
+def sensortype_mapper(source):
+    """
+    Maps the unique 3-letter code to different types of meters. Should be migrated to a database in a future version.
+    """
+    stype = re.search('B\d\d\d(.*)',source).group(1)[:-1] # removing the Bxxx part, and the trailing \r that seems to be in the database
+    stype = ''.join(filter(str.isalpha, stype)) # keep only the characters, drop all numbers - this gives a unique 3 letter code (for now) for all different meters
+    sensortypes = {
+        "EMS": "Electrical mains transformer (4160V - 480V)",
+        "EMH": "Electrical mains meter, high voltage (480V)",
+        "EML": "Electrical mains meter, low voltage (208V)",
+        "EUH": "Electrical sub-meter, high voltage (480V)",
+        "EUL": "Electrical sub-meter, low voltage (208V)"
+    }
+    try:
+        return (sensortypes[stype])
+    except KeyError:
+        return "unknown"
+
+
+def res_to_json(row):
+    """
+    Encode the result of a power-related SQL query to JSON
+    """
+    output = {
+        "source_name": row[3][:-1],    # remove the trailing \r that seems to be in the database
+        "source_type": sensortype_mapper(row[3]),
+        "timestamp": row[0],           # get data in UNIX format, with GMT times, client can use JavaScript to convert timezones.
+        "value_read": str(row[2]),
+        "units": units_mapper(row[1])
+    }
+    return(output)
 
 # @api.route("/checkuser",methods=['GET'])
 # @login_required
@@ -55,91 +98,35 @@ api = Blueprint('gtplaces', __name__)
 #         return flask.jsonify({"error":"Unable to authenticate"}), 403
 
 
-@api.route("/buildings", methods=['GET'])
-def getBuildings():
+@api.route("/facilities/energy/<b_id>", methods=['GET'])
+def getEnergyData(b_id):
     """
-    Returns list of all buildings with their information
-    Returns list of all buildings with building id, name, address, phone, website, latitude, longtitude, map shape coordinates, image url and tags.
+    Returns list of energy readings for a given building
+    With specified start and stop dates, retrieve list of all energy sensor readings at that building, with meter name, meter type, timestamp and value units.
     ---
     tags:
-        - buildings
-    produces:
-        - application/json
-    responses:
-        200:
-            description: An array of building information
-            schema:
-                type: array
-                items:
-                    type: object
-                    properties:
-                      b_id:
-                        type: string
-                        description: ID of the building
-                        required: true
-                      name:
-                        type: string
-                        description: Name of the building
-                        required: true
-                      address:
-                        type: string
-                        description: Address of the building
-                      address2:
-                        type: string
-                        description: City and state
-                      zipcode:
-                        type: string
-                        description: Zipcode of the building
-                      category:
-                        type: array
-                        items:
-                            type:string
-                        description: The categories the building belongs to
-                      image_url:
-                        type: string
-                        description: Image of the building
-                      website_url:
-                        type: string
-                        description: Website of the building
-                      phone_num:
-                        type: string
-                        description: Phone number of the building
-                      latitute:
-                        type: string
-                        description: Latitute of the building
-                      longitute:
-                        type: string
-                        description: Longitute of the building
-                      shape_coordinates:
-                        type: string
-                        description: Map poly-coordinates of the building
-                      tag_list:
-                        type: array
-                        items:
-                          type: string
-                        description: Tags of the building
-    """
-    buildings = Building.query.all()
-    return buildings_schema.jsonify(buildings)
-
-
-@api.route("/buildings_id/<b_id>", methods=['GET'])
-def getById(b_id):
-    """
-    Search building by ID
-    Given building ID, returns the building with building id, name, address, phone, website, latitude, longtitude, map shape coordinates, image url and tags.
-    ---
-    tags:
-        - buildings
+        - electricity
     produces:
         - application/json
     parameters:
         - name: b_id
           in: path
-          description: ID of the building.
+          description: building ID you need data from
           required: true
+          default: 26
           type: string
-          default: 50
+        - name: start
+          in: query
+          description: start timestamp of the readings
+          required: true
+          default: "2016-09-01 00:00:00"
+          type: string
+        - name: stop
+          in: query
+          description: end timestamp of the readings
+          required: true
+          default: "2016-09-03 23:59:59"
+          type: string
     responses:
         200:
             description: An array of building information
@@ -152,433 +139,224 @@ def getById(b_id):
                         type: string
                         description: ID of the building
                         required: true
-                      name:
+                      source_name:
                         type: string
-                        description: Name of the building
+                        description: Name of the sensor that recorded this value
                         required: true
-                      address:
+                      source_type:
                         type: string
-                        description: Address of the building
-                      address2:
+                        description: Detailed description of the sensor type
+                      timestamp:
                         type: string
-                        description: City and state
-                      zipcode:
+                        description: Timestamp of this recording
+                      units:
                         type: string
-                        description: Zipcode of the building
-                      category:
-                        type: array
-                        items:
-                            type:string
-                        description: The categories the building belongs to
-                      image_url:
+                        description: Units of the reading
+                      value_read:
                         type: string
-                        description: Image of the building
-                      website_url:
-                        type: string
-                        description: Website of the building
-                      phone_num:
-                        type: string
-                        description: Phone number of the building
-                      latitute:
-                        type: string
-                        description: Latitute of the building
-                      longitute:
-                        type: string
-                        description: Longitute of the building
-                      shape_coordinates:
-                        type: string
-                        description: Map poly-coordinates of the building
-                      tag_list:
-                        type: array
-                        items:
-                          type: string
-                        description: Tags of the building
+                        description: Value that the sensor reported
+        400:
+            description: Building ID not valid, or date range not present in the database
     """
-    building = Building.query.filter_by(b_id=b_id).first()
-    if not building:
+    start = request.form['start']
+    stop = request.form['stop']
+    if not start or not stop:
+        raise BadRequestException(message="start and stop parameters required, you cannot query the whole database")
+    power = Power.query.filter(Power.source_name.like('%B' + b_id.zfill(3) + '%'), Power.timestamp >= start, Power.timestamp <= stop).filter_by(type='Active Energy Delivered').order_by(Power.timestamp.desc())
+    if power:
+        power_energy_schema.jsonify(power)
+    else:
         raise NotFoundException()
-    return building_schema.jsonify(building)
 
-
-@api.route("/buildings/<name>", methods=['GET'])
-def getByName(name):
+@api.route("/facilities/power/<b_id>", methods=['GET'])
+def getPowerData(b_id):
     """
-    Search building by name
-    Given a part of a building name, returns the building with building id, name, address, phone, website, latitude, longtitude, map shape coordinates, image url and tags.
-    ---
-    tags:
-        - buildings
-    parameters:
-        - name: name
-          in: path
-          description: Name of the building (partial names are okay).
-          required: true
-          type: string
-          default: College of Computing
-    produces:
-        - application/json
-    responses:
-        200:
-            description: An array of building information
-            schema:
-                type: array
-                items:
-                    type: object
-                    properties:
-                      b_id:
-                        type: string
-                        description: ID of the building
-                        required: true
-                      name:
-                        type: string
-                        description: Name of the building
-                        required: true
-                      address:
-                        type: string
-                        description: Address of the building
-                      address2:
-                        type: string
-                        description: City and state
-                      zipcode:
-                        type: string
-                        description: Zipcode of the building
-                      category:
-                        type: array
-                        items:
-                            type:string
-                        description: The categories the building belongs to
-                      image_url:
-                        type: string
-                        description: Image of the building
-                      website_url:
-                        type: string
-                        description: Website of the building
-                      phone_num:
-                        type: string
-                        description: Phone number of the building
-                      latitute:
-                        type: string
-                        description: Latitute of the building
-                      longitute:
-                        type: string
-                        description: Longitute of the building
-                      shape_coordinates:
-                        type: string
-                        description: Map poly-coordinates of the building
-                      tag_list:
-                        type: array
-                        items:
-                          type: string
-                        description: Tags of the building
-    """
-    buildings = Building.query.filter_by(name=name)
-    return buildings_schema.jsonify(buildings)
-
-
-@api.route("/categories", methods=['GET'])
-def getCategories():
-    """
-    Return lists of all categories
-    Lists all the categories in the GTPlaces database
-    Categories are one of "University", "Housing" or "Greek", and is being preserved for legacy reasons.
-    ---
-    tags:
-        - categories
-    deprecated: true
-    produces:
-        - application/json
-    responses:
-        200:
-            description: List of all gtplaces categories
-            schema:
-                type: array
-                items:
+            Returns list of power readings for a given building
+            With specified start and stop dates, retrieve list of all power sensor readings at that building, with meter name, meter type, timestamp and value units.
+            ---
+            tags:
+                - electricity
+            produces:
+                - application/json
+            parameters:
+                - name: b_id
+                  in: path
+                  description: building ID you need data from
+                  required: true
+                  default: 26
                   type: string
-                description: List of all categories
-    """
-    categories = [r.cat_name for r in db.session.query(Category.cat_name).distinct()]
-    return flask.jsonify(categories)
-
-
-@api.route("/categories", methods=['POST'])
-def postCategories():
-    """
-    List all buildings in a certain category
-    Send 'category' in body with the category name to get all the buildings and associated information.
-    Categories are one of "University", "Housing" or "Greek", and is being preserved for legacy reasons.
-    ---
-    tags:
-        - categories
-    deprecated: true
-    consumes:
-        - application/x-www-form-urlencoded
-    parameters:
-        - name: category
-          in: formData
-          description: Category name. Current values are University, Housing and Greek.
-          required: true
-          type: string
-          default: University
-    produces:
-        - application/json
-    responses:
-        200:
-            description: List of all gtplaces categories
-            schema:
-                type: array
-                items:
-                    type: object
-                    properties:
-                      b_id:
-                        type: string
-                        description: ID of the building
-                        required: true
-                      name:
-                        type: string
-                        description: Name of the building
-                        required: true
-                      address:
-                        type: string
-                        description: Address of the building
-                      address2:
-                        type: string
-                        description: City and state
-                      zipcode:
-                        type: string
-                        description: Zipcode of the building
-                      category:
+                - name: start
+                  in: query
+                  description: start timestamp of the readings
+                  required: true
+                  default: "2016-09-01 00:00:00"
+                  type: string
+                - name: stop
+                  in: query
+                  description: end timestamp of the readings
+                  required: true
+                  default: "2016-09-03 23:59:59"
+                  type: string
+            responses:
+                200:
+                    description: An array of building information
+                    schema:
                         type: array
                         items:
-                            type:string
-                        description: The categories the building belongs to
-                      image_url:
-                        type: string
-                        description: Image of the building
-                      website_url:
-                        type: string
-                        description: Website of the building
-                      phone_num:
-                        type: string
-                        description: Phone number of the building
-                      latitute:
-                        type: string
-                        description: Latitute of the building
-                      longitute:
-                        type: string
-                        description: Longitute of the building
-                      shape_coordinates:
-                        type: string
-                        description: Map poly-coordinates of the building
-                      tag_list:
-                        type: array
-                        items:
-                          type: string
-                        description: Tags of the building
-    """
-    category = request.form['category']
-    buildings = Building.query.filter(Building.categories.any(cat_name=category))
-    return buildings_schema.jsonify(buildings)
-
-
-@api.route("/tags", methods=['GET'])
-def getTags():
-    """
-    Return lists of all tags
-    Lists all the tags in the GTPlaces database, with the associated information (Tag ID, Building ID it is associated with, User who created it, number of times it has been tagged or flagged).
-    Tags let users search by substrings associated with abbreviations, acronyms, aliases or sometimes even events inside a building. For example, Office of International Education is inside the Savant building, and Tags exists so there can be a mapping from "OIE" to "Savant building" so it appears in the search results.
-    ---
-    tags:
-        - tags
-    produces:
-        - application/json
-    responses:
-        200:
-            description: List of all gtplaces tags
-            schema:
-                type: array
-                items:
-                    type: object
-                    properties:
-                      tag_id:
-                        type: string
-                        required: true
-                        description: ID of the tag (autoincrement)
-                      b_id:
-                        type: string
-                        required: true
-                        description: ID of the building the tag is associated with
-                      tag_name:
-                        type: string
-                        description: Tag label
-                      gtuser:
-                        type: string
-                        description: User who created the tag (First user, in case of multiple times tagged)
-                      auth:
-                        type: string
-                        description: (only here for compatibility reasons, not used)
-                      times_tag:
-                        type: string
-                        description: Number of times this building has been tagged (possibly by different users)
-                      flag_users:
-                        type: string
-                        description: Users who have flagged this tag (First user, in case of multiple times tagged)
-                      times_flagged:
-                        type: string
-                        description: Number of times this tag has been flagged
-    """
-    tags = Tag.query.all()
-    return tags_schema.jsonify(tags)
-
-# TODO: secure
-@api.route("/tags", methods=['POST'])
-#@login_required
-def addTag():
-    """
-    Add a tag
-    Send 'b_id' (building ID), 'tag' (Tag Name) in POST body to add to the database.
-    Tags let users create searchable substrings associated with abbreviations, acronyms, aliases or sometimes even events inside a building. For example, Office of International Education is inside the Savant building, and Tags exists so there can be a mapping from "OIE" to "Savant building" so it appears in the search results.
-    *Using this method requires you to be logged in via CAS.*
-    ---
-    tags:
-        - tags
-    consumes:
-        - application/x-www-form-urlencoded
-    parameters:
-        - name: b_id
-          in: formData
-          description: Id of the building
-          required: true
-          type: string
-        - name: tag
-          in: formData
-          description: Name of the tag that you want to add to the building
-          required: true
-          type: string
-    produces:
-        - application/json
-    responses:
-        201:
-            description: Tag inserted
-        400:
-            description: Bad request, Building ID ('b_id') or Tag Name ('tag') missing in POST body
-    """
-    b_id = request.form['b_id']
-    tag_name = request.form['tag']
-    if not b_id or not tag_name:
-        raise BadRequestException(message="'b_id' and 'tag' required")
-
-    tag = Tag.query.filter_by(b_id=b_id, tag_name=tag_name).first()
-    if tag:
-        tag.times_tag = Tag.times_tag + 1
+                            type: object
+                            properties:
+                              b_id:
+                                type: string
+                                description: ID of the building
+                                required: true
+                              source_name:
+                                type: string
+                                description: Name of the sensor that recorded this value
+                                required: true
+                              source_type:
+                                type: string
+                                description: Detailed description of the sensor type
+                              timestamp:
+                                type: string
+                                description: Timestamp of this recording
+                              units:
+                                type: string
+                                description: Units of the reading
+                              value_read:
+                                type: string
+                                description: Value that the sensor reported
+                400:
+                    description: Start and stop parameters required
+                404:
+                    description: Building ID not found
+            """
+    start = request.form['start']
+    stop = request.form['stop']
+    if not start or not stop:
+        raise BadRequestException(message="start and stop parameters required, you cannot query the whole database")
+    power = Power.query.filter(Power.source_name.like('%B' + b_id.zfill(3) + '%'), Power.timestamp >= start, Power.timestamp <= stop).filter_by(type='Active Power').order_by(Power.timestamp.desc())
+    if power:
+        power_energy_schema.jsonify(power)
     else:
-        # TODO: get user from auth token
-        gtuser = 'anonymous'
-        tag = Tag(b_id=b_id, tag_name=tag_name, gtuser=gtuser)
-        db.session.add(tag)
-    db.session.commit()
-
-    return tag_schema.jsonify(tag), HTTPStatus.CREATED
-
-
-@api.route("/tags/<name>", methods=['GET'])
-def getByTagName(name):
-    """
-    Returns info about a particular tag
-    Given the tag name, the API returns all the information (Tag ID, Building ID it is associated with, User who created it, number of times it has been tagged or flagged) associated with that tag name.
-    ---
-    tags:
-        - tags
-    parameters:
-        - name: name
-          in: path
-          description: Name of the tag.
-          required: true
-          type: string
-          default: coc
-    produces:
-        - application/json
-    responses:
-        200:
-            description: List of all places associated with a certain tag
-            schema:
-                type: array
-                items:
-                    type: object
-                    properties:
-                      tag_id:
-                        type: string
-                        required: true
-                        description: ID of the tag (autoincrement)
-                      b_id:
-                        type: string
-                        required: true
-                        description: ID of the building the tag is associated with
-                      tag_name:
-                        type: string
-                        description: Tag label
-                      gtuser:
-                        type: string
-                        description: User who created the tag (First user, in case of multiple times tagged)
-                      auth:
-                        type: string
-                        description: (only here for compatibility reasons, not used)
-                      times_tag:
-                        type: string
-                        description: Number of times this building has been tagged (possibly by different users)
-                      flag_users:
-                        type: string
-                        description: Users who have flagged this tag (First user, in case of multiple times tagged)
-                      times_flagged:
-                        type: string
-                        description: Number of times this tag has been flagged
-    """
-    tag = Tag.query.filter_by(tag_name=name).first()
-    return tag_schema.jsonify(tag)
-
-# TODO: secure
-@api.route("/flag", methods=['POST'])
-#@login_required
-def flagTag():
-    """
-    Flag a certain tag as being incorrect
-    Send 'tag_name' as form data to flag an existing tag in the database.
-    If Tag ID does not exist, your flag will be ignored.
-    *Using this method requires you to be logged in via CAS.*
-    ---
-    tags:
-        - tags
-    consumes:
-        - application/x-www-form-urlencoded
-    parameters:
-        - name: tag_name
-          in: formData
-          description: Tag name to flag (example, 'recreation')
-          required: true
-          type: string
-    produces:
-        - application/json
-    responses:
-        201:
-            description: Tag flagged
-        400:
-            description: Bad request, `tag_name` missing in POST body
-    """
-    # Only flag an existing tag, changing this from the legacy implementation where you could tag by building ID (Jayanth)
-    tag_name = request.form['tag_name']
-    if not tag_name:
-        raise BadRequestException(message="'tag' required")
-
-    tag = Tag.query.filter_by(tag_name=tag_name).first()
-    if not tag:
         raise NotFoundException()
+
+@api.route("/facilities/sensor/<sensor_id>", methods=['GET'])
+def getSensorData(sensor_id):
+    """
+        Returns list of all sensor readings, given a particular sensor name
+        With specified start and stop dates, retrieve list of readings of the specified sensor, with meter name, meter type, timestamp and value units.
+        ---
+        tags:
+            - raw sensor
+        produces:
+            - application/json
+        parameters:
+            - name: sensor_id
+              in: path
+              description: sensor ID you need data from
+              required: true
+              default: "GTECH.B026E_MH1"
+              type: string
+            - name: start
+              in: query
+              description: start timestamp of the readings
+              required: true
+              default: "2016-09-01 00:00:00"
+              type: string
+            - name: stop
+              in: query
+              description: end timestamp of the readings
+              required: true
+              default: "2016-09-03 23:59:59"
+              type: string
+        responses:
+            200:
+                description: An array of building information
+                schema:
+                    type: array
+                    items:
+                        type: object
+                        properties:
+                          source_name:
+                            type: string
+                            description: Name of the sensor that recorded this value
+                            required: true
+                          source_type:
+                            type: string
+                            description: Detailed description of the sensor type
+                          timestamp:
+                            type: string
+                            description: Timestamp of this recording
+                          units:
+                            type: string
+                            description: Units of the reading
+                          value_read:
+                            type: string
+                            description: Value that the sensor reported
+            400:
+                description: Start and stop parameters required
+            404:
+                description: Sensor ID not found
+        """
+    start = request.form['start']
+    stop = request.form['stop']
+    if not start or not stop:
+        raise BadRequestException(message="start and stop parameters required, you cannot query the whole database")
+    sensor = Power.query.filter(Power.timestamp >= start, Power.timestamp <= stop).filter_by(source_name=(sensor_id + '\r')).order_by(Power.timestamp.asc())
+    if sensor:
+        sensor_schema.jsonify(sensor)
     else:
-        # TODO: get user from auth token
-        gtuser = 'anonymous'
-        # only flag the first once per user
-        if not (gtuser in tag.flag_users.split(',')):
-            tag.times_flagged = Tag.times_flagged + 1
-            tag.flag_users = Tag.flag_users + gtuser + ','
-            db.session.commit()
-        return tag_schema.jsonify(tag)
+        raise NotFoundException()
 
-
+    # @login_required
+    @api.route("/facilities/sensor_metadata/<sensor_id>", methods=['GET'])
+    def getSensorMetadata(sensor_id):
+        """
+            Returns list of all sensor readings, given a particular sensor name
+            With specified start and stop dates, retrieve list of readings of the specified sensor, with meter name, meter type, timestamp and value units.
+            ---
+            tags:
+                - metadata
+            produces:
+                - application/json
+            parameters:
+                - name: sensor_id
+                  in: path
+                  description: building ID you need data from
+                  required: true
+                  default: "B003E_MH1"
+                  type: string
+            responses:
+                200:
+                    description: An array of building information
+                    schema:
+                        type: array
+                        items:
+                            type: object
+                            properties:
+                              sensor_id:
+                                type: string
+                                description: ID of the sensor
+                                required: true
+                              sensor_type:
+                                type: string
+                                description: Type of sensor
+                              site:
+                                type: string
+                                description: Location of the sensor
+                              protocol:
+                                type: string
+                                description: Protocol that the sensor is using
+                              description:
+                                type: string
+                                description: Any additional description of the sensor
+                              cluster:
+                                type: string
+                                description: Cluster that the sensor belongs to, if any
+                404:
+                    description: Sensor ID not found
+            """
+        metadata = Sensors.query.filter_by(sensor_id=sensor_id).first()
+        if not metadata:
+            raise NotFoundException()
+        return sensor_metadata_schema.jsonify(metadata)

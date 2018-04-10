@@ -11,4 +11,5 @@ from api.models import Power, Users, Sensors
 
 class TestPowerApi:
     # TODO: Write test cases
-    pass
+    def test_get_energy_data(self, db, load_test_db, test_client):
+        response = test_client.get('/energy/026')

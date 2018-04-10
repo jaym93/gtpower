@@ -5,47 +5,36 @@ See Marshmallow documentation:
 https://flask-marshmallow.readthedocs.io/en/latest/
 http://marshmallow.readthedocs.io/en/latest/
 """
-from places.extensions import ma
+from api.extensions import ma
 
 
-class TagSchema(ma.Schema):
+class PowerOrAndEnergySchema(ma.Schema):
     """
-    JSON schema for a building tag
+    JSON schema for the 'power' table in CORE_gtfacilities
     """
     class Meta:
         # JSON fields - type will be inferred
-        # TODO: not exposing 'app_id', 'auth' fields
-        fields = ('tag_id','b_id', 'tag_name', 'gtuser', 'times_tag', 'flag_users', 'times_flagged')
+        fields = ('b_id', 'source_name', 'source_type', 'timestamp', 'units', 'value_read')
 
 
-class CategorySchema(ma.Schema):
+class SensorReadingSchema(ma.Schema):
     """
     JSON schema for a building category
     """
     class Meta:
         # JSON fields - type will be inferred
-        fields = ['cat_name']
+        fields = ('source_name', 'source_type', 'timestamp', 'units', 'value_read')
 
 
-class BuildingSchema(ma.Schema):
+class SensorMetadataSchema(ma.Schema):
     """
     JSON schema for a building
     """
     class Meta:
         # JSON fields - type will be inferred
-        # TODO: not exposing 'app_id', however this is in the database
-        fields = ('b_id', 'name', 'address', 'address2', 'zipcode', 'image_url', 'website_url', 'latitude', 'longitude',
-                  'shape_coordinates', 'phone_num', 'tags', 'categories')
-    # 'address2' field maps to the DB model attribute 'city', which must explicitly defined w/ attribute mapping
-    address2 = ma.String(attribute='city')
-
-    # include lists of only the tag and category names
-    tags = ma.Nested(TagSchema, only='tag_name', many=True)
-    categories = ma.Nested(CategorySchema, only='cat_name', many=True)
+        fields = ('cluster_id', 'description', 'protocol', 'sensor_id', 'sensor_type', 'site')
 
 
-building_schema = BuildingSchema()
-buildings_schema = BuildingSchema(many=True)
-
-tag_schema = TagSchema()
-tags_schema = TagSchema(many=True)
+power_energy_schema = PowerOrAndEnergySchema(many=True)
+sensor_schema = SensorReadingSchema(many=True)
+sensor_metadata_schema = SensorMetadataSchema()
