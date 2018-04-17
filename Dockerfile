@@ -25,4 +25,4 @@ ENV DB_PASSWORD k!ll3r@pps
 
 EXPOSE 5000
 
-CMD ["python3", "power_api.py"]
+CMD ["python3", "autoapp.py"]
